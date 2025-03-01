@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>心动迷宫 ❤️ 专属游戏</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #game-container { position: relative; }
+        .dialog-box {
+            position: absolute;
+            bottom: 10%;
+            left: 5%;
+            right: 5%;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            font-family: '楷体';
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div class="dialog-box" id="mainDialog">
+        <div id="dialogText"></div>
+        <div id="choices" style="margin-top:15px"></div>
+    </div>
+
+<script>
+const config = {
+    type: Phaser.AUTO,
+    parent: 'game-container',
+    width: 375,  // 适配手机竖屏
+    height: 667,
+    backgroundColor: '#1a1a1a',
+    scene: {
+        preload: preload,
+        create: create,
+        update: update
+    },
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    }
+};
+
+let game = new Phaser.Game(config);
+let currentLevel = 0;
+let lovePoints = 0;
+
+// 游戏资源
+function preload() {
+    this.load.image('heart', 'data:image/png;base64,iVBORw0KGgo...'); // 心形精灵Base64
+    this.load.audio('bgm', ['https://example.com/love.mp3']); 
+}
+
+// 游戏初始化
+function create() {
+    // 创建BGM
+    this.bgm = this.sound.add('bgm', { loop: true });
+    this.bgm.play();
+
+    // 创建角色
+    this.player = this.physics.add.sprite(180, 600, 'heart')
+        .setScale(0.3)
+        .setTint(0xff3366);
+
+    // 创建迷宫关卡
+    createLevel(this, currentLevel);
+
+    // 初始化对话框
+    showDialog("你闯入了我的心之迷宫...\n找到所有记忆碎片吧！", [
+        { text: "开始冒险", action: () => hideDialog() }
+    ]);
+}
+
+// 动态生成关卡
+function createLevel(scene, level) {
+    scene.physics.world.clear();
+    
+    // 迷宫生成算法
+    const maze = generateMaze(level);
+    
+    // 创建动态障碍
+    maze.walls.forEach(wall => {
+        scene.physics.add.staticGroup().create(wall.x, wall.y, 'wall');
+    });
+
+    // 创建记忆碎片
+    scene.memoryPieces = scene.physics.add.group();
+    for(let i=0; i<3; i++) {
+        scene.memoryPieces.create(
+            Phaser.Math.Between(50, 325),
+            Phaser.Math.Between(100, 500),
+            'heart'
+        ).setInteractive().on('pointerdown', () => collectMemory(scene));
+    }
+}
+
+// 游戏主循环
+function update() {
+    // 移动控制
+    const speed = 200;
+    if (this.cursors) {
+        this.player.setVelocity(
+            this.cursors.left.isDown ? -speed : this.cursors.right.isDown ? speed : 0,
+            this.cursors.up.isDown ? -speed : this.cursors.down.isDown ? speed : 0
+        );
+    }
+}
+
+// 游戏事件
+function collectMemory(scene) {
+    lovePoints += 10;
+    scene.memoryPieces.getChildren()[0].destroy();
+    
+    if (scene.memoryPieces.countActive() === 0) {
+        currentLevel++;
+        if (currentLevel < 3) {
+            showLevelComplete(scene);
+        } else {
+            showFinalConfession();
+        }
+    }
+}
+
+// 关卡完成界面
+function showLevelComplete(scene) {
+    const messages = [
+        "第一关：初次相遇的悸动",
+        "第二关：共同经历的时光",
+        "最终关：真挚的心意"
+    ];
+    
+    showDialog(`${messages[currentLevel-1]}\n获得${lovePoints}点心动值！`, [
+        { text: "继续前进", action: () => { 
+            createLevel(scene, currentLevel);
+            hideDialog();
+        }}
+    ]);
+}
+
+// 最终表白场景
+function showFinalConfession() {
+    const scene = game.scene.scenes[0];
+    scene.physics.pause();
+    
+    // 粒子特效
+    const emitter = scene.add.particles(0,0,'heart',{
+        speed: 100,
+        scale: { start: 0.3, end: 0 },
+        blendMode: 'ADD',
+        emitting: true
+    }).startFollow(scene.player);
+
+    // 动态文字
+    scene.add.text(60, 200, '我愿与你', { 
+        fontSize: '40px',
+        fontFamily: '楷体',
+        color: '#ff3366',
+        stroke: '#fff',
+        strokeThickness: 4
+    }).setAlpha(0).setAngle(-5).setScale(0.5)
+      .animate({ targets: '*', alpha: 1, scale: 1, angle: 0, duration: 2000 });
+
+    showDialog("收集了所有回忆碎片...\n你愿意成为我的专属玩家吗？", [
+        { 
+            text: "❤️ 确认登录人生游戏 ❤️", 
+            action: () => {
+                scene.scene.start('ending', { choice: 'yes' });
+            }
+        },
+        {
+            text: "返回主菜单",
+            action: () => scene.scene.restart()
+        }
+    ]);
+}
+
+// 对话框系统
+function showDialog(text, choices) {
+    const dialog = document.getElementById('mainDialog');
+    const textEl = document.getElementById('dialogText');
+    const choicesEl = document.getElementById('choices');
+    
+    textEl.innerHTML = text;
+    choicesEl.innerHTML = '';
+    
+    choices.forEach(choice => {
+        const btn = document.createElement('button');
+        btn.style = 'margin:5px; padding:8px 15px; border-radius:20px; background:#ff3366; color:white;';
+        btn.innerText = choice.text;
+        btn.onclick = () => {
+            choice.action();
+            dialog.style.display = 'none';
+        };
+        choicesEl.appendChild(btn);
+    });
+    
+    dialog.style.display = 'block';
+}
+
+function hideDialog() {
+    document.getElementById('mainDialog').style.display = 'none';
+}
+
+// 迷宫生成算法
+function generateMaze(level) {
+    // 使用递归分割算法生成不同难度的迷宫
+    // 返回包含墙壁坐标和可通行区域的迷宫数据
+    return { walls: [...] }; 
+}
+</script>
+</body>
+</html>
